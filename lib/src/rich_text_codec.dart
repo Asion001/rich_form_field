@@ -7,6 +7,26 @@ abstract class RichTextCodec {
   String encode(RichTextFormatResult value);
 }
 
+/// Builds a text style for a custom style range in the editor.
+typedef RichTextStyleBuilder = TextStyle Function(TextStyle base);
+
+/// Describes a custom style that can be encoded/decoded in HTML.
+class RichTextCustomStyle {
+  const RichTextCustomStyle({
+    required this.key,
+    this.tag = 'span',
+    this.className,
+    this.attributes = const {},
+    this.styleBuilder,
+  });
+
+  final String key;
+  final String tag;
+  final String? className;
+  final Map<String, String> attributes;
+  final RichTextStyleBuilder? styleBuilder;
+}
+
 class RichTextRange {
   RichTextRange(this.start, this.end);
 
@@ -27,6 +47,7 @@ class RichTextFormatResult {
     required this.italicRanges,
     required this.underlineRanges,
     required this.colorRanges,
+    this.customStyleRanges = const {},
   });
 
   final String text;
@@ -34,10 +55,15 @@ class RichTextFormatResult {
   final List<RichTextRange> italicRanges;
   final List<RichTextRange> underlineRanges;
   final List<RichTextColorRange> colorRanges;
+
+  /// Ranges keyed by custom style id.
+  final Map<String, List<RichTextRange>> customStyleRanges;
 }
 
 class HtmlRichTextCodec extends RichTextCodec {
-  const HtmlRichTextCodec();
+  const HtmlRichTextCodec({this.customStyles = const []});
+
+  final List<RichTextCustomStyle> customStyles;
 
   @override
   RichTextFormatResult decode(String input) {
@@ -45,11 +71,15 @@ class HtmlRichTextCodec extends RichTextCodec {
     final italicRanges = <RichTextRange>[];
     final underlineRanges = <RichTextRange>[];
     final colorRanges = <RichTextColorRange>[];
+    final customRanges = <String, List<RichTextRange>>{
+      for (final style in customStyles) style.key: <RichTextRange>[],
+    };
 
     var boldDepth = 0;
     var italicDepth = 0;
     var underlineDepth = 0;
     final colorStack = <Color?>[];
+    final customDepths = <String, int>{};
 
     final buffer = StringBuffer();
 
@@ -80,6 +110,11 @@ class HtmlRichTextCodec extends RichTextCodec {
       final currentColor = _currentColor(colorStack);
       if (currentColor != null) {
         colorRanges.add(RichTextColorRange(start, end, currentColor));
+      }
+      for (final entry in customDepths.entries) {
+        if (entry.value > 0) {
+          customRanges[entry.key]?.add(RichTextRange(start, end));
+        }
       }
     }
 
@@ -141,12 +176,28 @@ class HtmlRichTextCodec extends RichTextCodec {
         colorStack.add(_parseColorFromStyle(node.attributes['style']));
       }
 
+      final matchedCustomStyles = _matchedCustomStyles(node, customStyles);
+      for (final style in matchedCustomStyles) {
+        customDepths[style.key] = (customDepths[style.key] ?? 0) + 1;
+      }
+
       for (final child in node.nodes) {
         visitNode(child);
       }
 
       if (isSpan && colorStack.isNotEmpty) {
         colorStack.removeLast();
+      }
+      for (final style in matchedCustomStyles) {
+        final depth = customDepths[style.key];
+        if (depth == null) {
+          continue;
+        }
+        if (depth <= 1) {
+          customDepths.remove(style.key);
+        } else {
+          customDepths[style.key] = depth - 1;
+        }
       }
       if (isUnderline && underlineDepth > 0) {
         underlineDepth -= 1;
@@ -173,6 +224,7 @@ class HtmlRichTextCodec extends RichTextCodec {
       italicRanges: italicRanges,
       underlineRanges: underlineRanges,
       colorRanges: colorRanges,
+      customStyleRanges: customRanges,
     );
   }
 
@@ -191,7 +243,12 @@ class HtmlRichTextCodec extends RichTextCodec {
       final isList = line.startsWith('- ');
       final contentStart = isList ? lineStart + 2 : lineStart;
       final contentEnd = lineEnd;
-      final lineHtml = _buildHtmlForRange(value, contentStart, contentEnd);
+      final lineHtml = _buildHtmlForRange(
+        value,
+        contentStart,
+        contentEnd,
+        customStyles,
+      );
 
       if (isList) {
         if (!inList) {
@@ -220,12 +277,22 @@ class HtmlRichTextCodec extends RichTextCodec {
   }
 }
 
-String _buildHtmlForRange(RichTextFormatResult value, int start, int end) {
+String _buildHtmlForRange(
+  RichTextFormatResult value,
+  int start,
+  int end,
+  List<RichTextCustomStyle> customStyles,
+) {
   if (start >= end) {
     return '';
   }
 
-  final boundaries = _collectBoundariesFromRanges(value, start, end);
+  final boundaries = _collectBoundariesFromRanges(
+    value,
+    start,
+    end,
+    customStyles,
+  );
   final buffer = StringBuffer();
 
   for (var i = 0; i < boundaries.length - 1; i += 1) {
@@ -236,7 +303,9 @@ String _buildHtmlForRange(RichTextFormatResult value, int start, int end) {
     }
 
     final segment = value.text.substring(segStart, segEnd);
-    buffer.write(_wrapHtmlSegment(value, segment, segStart, segEnd));
+    buffer.write(
+      _wrapHtmlSegment(value, segment, segStart, segEnd, customStyles),
+    );
   }
 
   return buffer.toString();
@@ -246,6 +315,7 @@ List<int> _collectBoundariesFromRanges(
   RichTextFormatResult value,
   int start,
   int end,
+  List<RichTextCustomStyle> customStyles,
 ) {
   final boundaries = <int>{start, end};
 
@@ -266,6 +336,12 @@ List<int> _collectBoundariesFromRanges(
   for (final range in value.colorRanges) {
     addRange(range);
   }
+  for (final style in customStyles) {
+    final ranges = value.customStyleRanges[style.key] ?? const [];
+    for (final range in ranges) {
+      addRange(range);
+    }
+  }
 
   final sorted = boundaries.toList()..sort();
   return sorted;
@@ -276,6 +352,7 @@ String _wrapHtmlSegment(
   String text,
   int start,
   int end,
+  List<RichTextCustomStyle> customStyles,
 ) {
   var result = _escapeHtml(text);
   final color = _colorForRange(value.colorRanges, start, end);
@@ -291,7 +368,77 @@ String _wrapHtmlSegment(
   if (_anyRangeCovers(value.boldRanges, start, end)) {
     result = '<b>$result</b>';
   }
+  for (final style in customStyles) {
+    final ranges = value.customStyleRanges[style.key] ?? const [];
+    if (_anyRangeCovers(ranges, start, end)) {
+      result = _wrapCustomStyle(style, result);
+    }
+  }
   return result;
+}
+
+List<RichTextCustomStyle> _matchedCustomStyles(
+  html_dom.Element node,
+  List<RichTextCustomStyle> customStyles,
+) {
+  if (customStyles.isEmpty) {
+    return const [];
+  }
+
+  final matched = <RichTextCustomStyle>[];
+  final dataStyle = node.attributes['data-rff-style'];
+  for (final style in customStyles) {
+    if (dataStyle == style.key) {
+      matched.add(style);
+      continue;
+    }
+
+    if (style.className == null && style.attributes.isEmpty) {
+      continue;
+    }
+
+    final tag = node.localName?.toLowerCase() ?? '';
+    if (tag != style.tag.toLowerCase()) {
+      continue;
+    }
+    if (style.className != null && !node.classes.contains(style.className)) {
+      continue;
+    }
+    var matches = true;
+    for (final entry in style.attributes.entries) {
+      if (node.attributes[entry.key] != entry.value) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) {
+      matched.add(style);
+    }
+  }
+  return matched;
+}
+
+String _wrapCustomStyle(RichTextCustomStyle style, String html) {
+  final attributes = <String, String>{};
+  attributes['data-rff-style'] = style.key;
+  if (style.className != null && style.className!.isNotEmpty) {
+    attributes['class'] = style.className!;
+  }
+  if (style.attributes.isNotEmpty) {
+    attributes.addAll(style.attributes);
+  }
+
+  final buffer = StringBuffer('<${style.tag}');
+  for (final entry in attributes.entries) {
+    buffer
+      ..write(' ')
+      ..write(entry.key)
+      ..write('="')
+      ..write(_escapeHtml(entry.value))
+      ..write('"');
+  }
+  buffer.write('>$html</${style.tag}>');
+  return buffer.toString();
 }
 
 bool _anyRangeCovers(List<RichTextRange> ranges, int start, int end) {

@@ -1,8 +1,15 @@
 part of 'package:rich_form_field/rich_form_field.dart';
 
 class HtmlRichTextController extends TextEditingController {
-  HtmlRichTextController({String? html, RichTextCodec? codec})
-    : _codec = codec ?? const HtmlRichTextCodec() {
+  HtmlRichTextController({
+    String? html,
+    RichTextCodec? codec,
+    Iterable<RichTextCustomStyle>? customStyles,
+    this.autoInsertListMarkers = false,
+  }) : _codec = codec ?? const HtmlRichTextCodec() {
+    if (customStyles != null) {
+      registerStyles(customStyles);
+    }
     setHtml(html ?? '');
     _lastText = text;
     addListener(_handleChange);
@@ -14,6 +21,9 @@ class HtmlRichTextController extends TextEditingController {
   final List<_Range> _italicRanges = [];
   final List<_Range> _underlineRanges = [];
   final List<_ColorRange> _colorRanges = [];
+  final Map<String, List<_Range>> _customStyleRanges = {};
+  final Map<String, bool> _pendingCustomStyles = {};
+  final Map<String, RichTextStyleBuilder> _customStyleBuilders = {};
 
   bool _pendingBold = false;
   bool _pendingItalic = false;
@@ -22,6 +32,7 @@ class HtmlRichTextController extends TextEditingController {
 
   String _lastText = '';
   bool _suppressChanges = false;
+  bool autoInsertListMarkers;
 
   RichTextCodec get codec => _codec;
 
@@ -37,6 +48,31 @@ class HtmlRichTextController extends TextEditingController {
   bool get isListActive => _selectionHasList();
 
   Color? get activeColor => _selectionColor() ?? _pendingColor;
+
+  /// Returns whether the current selection or pending state has a custom style.
+  bool isCustomStyleActive(String key) {
+    final ranges = _customStyleRanges[key];
+    if (ranges == null) {
+      return _pendingCustomStyles[key] ?? false;
+    }
+    return _selectionHasStyle(ranges) || (_pendingCustomStyles[key] ?? false);
+  }
+
+  /// Registers a custom style for use in the editor.
+  void registerStyle(RichTextCustomStyle style) {
+    _customStyleRanges.putIfAbsent(style.key, () => []);
+    _pendingCustomStyles.putIfAbsent(style.key, () => false);
+    if (style.styleBuilder != null) {
+      _customStyleBuilders[style.key] = style.styleBuilder!;
+    }
+  }
+
+  /// Registers multiple custom styles for use in the editor.
+  void registerStyles(Iterable<RichTextCustomStyle> styles) {
+    for (final style in styles) {
+      registerStyle(style);
+    }
+  }
 
   void setHtml(String html) {
     final result = _codec.decode(html);
@@ -71,6 +107,16 @@ class HtmlRichTextController extends TextEditingController {
           (range) => _ColorRange(range.start, range.end, range.color),
         ),
       );
+    _customStyleRanges
+      ..clear()
+      ..addEntries(
+        result.customStyleRanges.entries.map(
+          (entry) => MapEntry(
+            entry.key,
+            entry.value.map((range) => _Range(range.start, range.end)).toList(),
+          ),
+        ),
+      );
     value = value.copyWith(
       text: result.text,
       selection: TextSelection.collapsed(offset: result.text.length),
@@ -80,27 +126,46 @@ class HtmlRichTextController extends TextEditingController {
     _pendingItalic = false;
     _pendingUnderline = false;
     _pendingColor = null;
+    if (_pendingCustomStyles.isNotEmpty) {
+      _pendingCustomStyles.updateAll((_, __) => false);
+    }
     _lastText = text;
     _suppressChanges = false;
   }
 
   RichTextFormatResult _snapshot() {
+    final customStyleRanges = <String, List<RichTextRange>>{};
+    _customStyleRanges.forEach((key, ranges) {
+      if (ranges.isNotEmpty) {
+        customStyleRanges[key] =
+            ranges
+                .map((range) => RichTextRange(range.start, range.end))
+                .toList();
+      }
+    });
+
     return RichTextFormatResult(
       text: text,
-      boldRanges: _boldRanges
-          .map((range) => RichTextRange(range.start, range.end))
-          .toList(),
-      italicRanges: _italicRanges
-          .map((range) => RichTextRange(range.start, range.end))
-          .toList(),
-      underlineRanges: _underlineRanges
-          .map((range) => RichTextRange(range.start, range.end))
-          .toList(),
-      colorRanges: _colorRanges
-          .map(
-            (range) => RichTextColorRange(range.start, range.end, range.color),
-          )
-          .toList(),
+      boldRanges:
+          _boldRanges
+              .map((range) => RichTextRange(range.start, range.end))
+              .toList(),
+      italicRanges:
+          _italicRanges
+              .map((range) => RichTextRange(range.start, range.end))
+              .toList(),
+      underlineRanges:
+          _underlineRanges
+              .map((range) => RichTextRange(range.start, range.end))
+              .toList(),
+      colorRanges:
+          _colorRanges
+              .map(
+                (range) =>
+                    RichTextColorRange(range.start, range.end, range.color),
+              )
+              .toList(),
+      customStyleRanges: customStyleRanges,
     );
   }
 
@@ -205,6 +270,7 @@ class HtmlRichTextController extends TextEditingController {
     _shiftRangeList(_italicRanges, diff);
     _shiftRangeList(_underlineRanges, diff);
     _shiftColorRanges(diff);
+    _shiftCustomRanges(diff);
   }
 
   void _shiftRangeList(List<_Range> ranges, _TextDiff diff) {
@@ -227,6 +293,18 @@ class HtmlRichTextController extends TextEditingController {
       ..addAll(updated);
   }
 
+  void _shiftCustomRanges(_TextDiff diff) {
+    for (final entry in _customStyleRanges.entries) {
+      final updated = <_Range>[];
+      for (final range in entry.value) {
+        updated.addAll(range.shifted(diff));
+      }
+      entry.value
+        ..clear()
+        ..addAll(updated);
+    }
+  }
+
   void _applyPendingStyles(int start, int end) {
     if (start >= end) {
       return;
@@ -244,6 +322,14 @@ class HtmlRichTextController extends TextEditingController {
     if (_pendingColor != null) {
       _colorRanges.add(_ColorRange(start, end, _pendingColor!));
     }
+    _pendingCustomStyles.forEach((key, enabled) {
+      if (!enabled) {
+        return;
+      }
+      final ranges = _customStyleRanges.putIfAbsent(key, () => []);
+      ranges.add(_Range(start, end));
+      _normalizeRanges(ranges);
+    });
 
     _normalizeRanges(_boldRanges);
     _normalizeRanges(_italicRanges);
@@ -329,9 +415,10 @@ class HtmlRichTextController extends TextEditingController {
       return null;
     }
 
-    final covering = _colorRanges
-        .where((range) => range.covers(selection.start, selection.end))
-        .toList();
+    final covering =
+        _colorRanges
+            .where((range) => range.covers(selection.start, selection.end))
+            .toList();
     if (covering.isEmpty) {
       return null;
     }
@@ -356,6 +443,12 @@ class HtmlRichTextController extends TextEditingController {
     final color = _colorForRange(start, end);
     if (color != null) {
       style = style.copyWith(color: color);
+    }
+    for (final entry in _customStyleBuilders.entries) {
+      final ranges = _customStyleRanges[entry.key];
+      if (ranges != null && _anyRangeCovers(ranges, start, end)) {
+        style = entry.value(style);
+      }
     }
     return style;
   }
@@ -387,8 +480,38 @@ class HtmlRichTextController extends TextEditingController {
       boundaries.add(range.start.clamp(start, end));
       boundaries.add(range.end.clamp(start, end));
     }
+    for (final ranges in _customStyleRanges.values) {
+      for (final range in ranges) {
+        boundaries.add(range.start.clamp(start, end));
+        boundaries.add(range.end.clamp(start, end));
+      }
+    }
     final sorted = boundaries.toList()..sort();
     return sorted;
+  }
+
+  /// Toggles a custom style for the current selection or pending input.
+  void toggleCustomStyle(String key) {
+    final selection = this.selection;
+    if (!selection.isValid) {
+      return;
+    }
+
+    final ranges = _customStyleRanges.putIfAbsent(key, () => []);
+    if (selection.isCollapsed) {
+      _pendingCustomStyles[key] = !(_pendingCustomStyles[key] ?? false);
+      notifyListeners();
+      return;
+    }
+
+    if (_isRangeFullyCovered(ranges, selection.start, selection.end)) {
+      _removeStyleFromSelection(ranges, selection.start, selection.end);
+    } else {
+      ranges.add(_Range(selection.start, selection.end));
+      _normalizeRanges(ranges);
+    }
+
+    notifyListeners();
   }
 
   bool _anyRangeCovers(List<_Range> ranges, int start, int end) {
@@ -469,6 +592,9 @@ class HtmlRichTextController extends TextEditingController {
   }
 
   bool _shouldInsertListMarker(_TextDiff diff, String newText) {
+    if (!autoInsertListMarkers) {
+      return false;
+    }
     if (!selection.isValid || !selection.isCollapsed) {
       return false;
     }
