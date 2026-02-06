@@ -14,7 +14,7 @@ and the Flutter guide for
 Rich text form field with a formatting toolbar, inline style ranges, and
 HTML codec output. Designed for simple rich text input in Flutter forms.
 
-![Demo](docs/demo.gif)
+![Demo](https://raw.githubusercontent.com/Asion001/rich_form_field/main/doc/demo.gif)
 
 ## Features
 
