@@ -1,6 +1,8 @@
 name: rich_form_field
-description: Rich text form field with HTML output.
+description: Rich text form field with toolbar, styling ranges, and HTML codec output.
 version: 0.1.0
+repository: https://github.com/Asion001/rich_form_field
+issue_tracker: https://github.com/Asion001/rich_form_field/issues
 
 environment:
   sdk: ">=3.9.0 <4.0.0"
@@ -9,6 +11,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  html: ^0.15.4
 
 dev_dependencies:
   flutter_test:

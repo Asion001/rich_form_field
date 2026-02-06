@@ -1,3 +1,5 @@
-## 0.0.1
+## 0.1.0
 
-* TODO: Describe initial release.
+- Initial release of `HtmlRichTextFormField` and `HtmlRichTextController`.
+- HTML codec backed by `package:html` with style ranges and list handling.
+- Example Flutter app with all platforms enabled.

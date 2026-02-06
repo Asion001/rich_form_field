@@ -11,29 +11,47 @@ and the Flutter guide for
 [developing packages and plugins](https://flutter.dev/to/develop-packages).
 -->
 
-TODO: Put a short description of the package here that helps potential users
-know whether this package might be useful for them.
+Rich text form field with a formatting toolbar, inline style ranges, and
+HTML codec output. Designed for simple rich text input in Flutter forms.
 
 ## Features
 
-TODO: List what your package can do. Maybe include images, gifs, or videos.
+- `HtmlRichTextFormField` with bold, italic, underline, list, and color tools.
+- `HtmlRichTextController` that tracks style ranges and produces HTML output.
+- Pluggable `RichTextCodec` for alternative save formats.
+- HTML parsing backed by `package:html` and a simple tag subset.
 
 ## Getting started
 
-TODO: List prerequisites and provide or point to information on how to
-start using the package.
+Add the dependency to `pubspec.yaml`:
+
+```yaml
+dependencies:
+	rich_form_field: ^0.1.0
+```
 
 ## Usage
 
-TODO: Include short and useful examples for package users. Add longer examples
-to `/example` folder.
-
 ```dart
-const like = 'sample';
+HtmlRichTextFormField(
+  strings: const RichTextEditorStrings(
+    bold: 'Bold',
+    italic: 'Italic',
+    underline: 'Underline',
+    list: 'List',
+    textColor: 'Color',
+    clear: 'Clear',
+    cancel: 'Cancel',
+  ),
+  onChanged: (html) {
+    // Persist the HTML output.
+  },
+)
 ```
+
+See the full example app in [example/lib/main.dart](example/lib/main.dart).
 
 ## Additional information
 
-TODO: Tell users more about the package: where to find more information, how to
-contribute to the package, how to file issues, what response they can expect
-from the package authors, and more.
+- Repository: https://github.com/Asion001/rich_form_field
+- Issues: https://github.com/Asion001/rich_form_field/issues

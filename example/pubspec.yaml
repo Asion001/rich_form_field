@@ -1,0 +1,20 @@
+name: rich_form_field_example
+publish_to: none
+description: Example app for rich_form_field.
+version: 0.1.0
+
+environment:
+  sdk: ">=3.9.0 <4.0.0"
+  flutter: ^3.38.9
+
+dependencies:
+  flutter:
+    sdk: flutter
+  rich_form_field:
+    path: ../
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

@@ -1,11 +1,14 @@
 part of 'package:rich_form_field/rich_form_field.dart';
 
 class HtmlRichTextController extends TextEditingController {
-  HtmlRichTextController({String? html}) {
+  HtmlRichTextController({String? html, RichTextCodec? codec})
+    : _codec = codec ?? const HtmlRichTextCodec() {
     setHtml(html ?? '');
     _lastText = text;
     addListener(_handleChange);
   }
+
+  final RichTextCodec _codec;
 
   final List<_Range> _boldRanges = [];
   final List<_Range> _italicRanges = [];
@@ -20,7 +23,11 @@ class HtmlRichTextController extends TextEditingController {
   String _lastText = '';
   bool _suppressChanges = false;
 
-  String get html => _buildHtml();
+  RichTextCodec get codec => _codec;
+
+  String get html => _codec.encode(_snapshot());
+
+  String get encoded => _codec.encode(_snapshot());
 
   bool get isBoldActive => _selectionHasStyle(_boldRanges) || _pendingBold;
   bool get isItalicActive =>
@@ -32,20 +39,38 @@ class HtmlRichTextController extends TextEditingController {
   Color? get activeColor => _selectionColor() ?? _pendingColor;
 
   void setHtml(String html) {
-    final result = _HtmlParser.parse(html);
+    final result = _codec.decode(html);
+    _applyFormatResult(result);
+  }
+
+  void setEncoded(String value) {
+    setHtml(value);
+  }
+
+  void _applyFormatResult(RichTextFormatResult result) {
     _suppressChanges = true;
     _boldRanges
       ..clear()
-      ..addAll(result.boldRanges);
+      ..addAll(
+        result.boldRanges.map((range) => _Range(range.start, range.end)),
+      );
     _italicRanges
       ..clear()
-      ..addAll(result.italicRanges);
+      ..addAll(
+        result.italicRanges.map((range) => _Range(range.start, range.end)),
+      );
     _underlineRanges
       ..clear()
-      ..addAll(result.underlineRanges);
+      ..addAll(
+        result.underlineRanges.map((range) => _Range(range.start, range.end)),
+      );
     _colorRanges
       ..clear()
-      ..addAll(result.colorRanges);
+      ..addAll(
+        result.colorRanges.map(
+          (range) => _ColorRange(range.start, range.end, range.color),
+        ),
+      );
     value = value.copyWith(
       text: result.text,
       selection: TextSelection.collapsed(offset: result.text.length),
@@ -57,6 +82,26 @@ class HtmlRichTextController extends TextEditingController {
     _pendingColor = null;
     _lastText = text;
     _suppressChanges = false;
+  }
+
+  RichTextFormatResult _snapshot() {
+    return RichTextFormatResult(
+      text: text,
+      boldRanges: _boldRanges
+          .map((range) => RichTextRange(range.start, range.end))
+          .toList(),
+      italicRanges: _italicRanges
+          .map((range) => RichTextRange(range.start, range.end))
+          .toList(),
+      underlineRanges: _underlineRanges
+          .map((range) => RichTextRange(range.start, range.end))
+          .toList(),
+      colorRanges: _colorRanges
+          .map(
+            (range) => RichTextColorRange(range.start, range.end, range.color),
+          )
+          .toList(),
+    );
   }
 
   void toggleBold() =>
@@ -459,87 +504,5 @@ class HtmlRichTextController extends TextEditingController {
     final cursor = selection.baseOffset;
     final newText = '${text.substring(0, cursor)}- ${text.substring(cursor)}';
     _applyTextChange(newText, TextSelection.collapsed(offset: cursor + 2));
-  }
-
-  String _buildHtml() {
-    final lines = _splitLines(text);
-    final buffer = StringBuffer();
-    var inList = false;
-    var offset = 0;
-
-    for (final line in lines) {
-      final lineStart = offset;
-      final lineEnd = lineStart + line.length;
-      offset = lineEnd + 1;
-
-      final isList = line.startsWith('- ');
-      final contentStart = isList ? lineStart + 2 : lineStart;
-      final contentEnd = lineEnd;
-      final lineHtml = _buildHtmlForRange(contentStart, contentEnd);
-
-      if (isList) {
-        if (!inList) {
-          buffer.write('<ul>');
-          inList = true;
-        }
-        buffer.write('<li>$lineHtml</li>');
-      } else {
-        if (inList) {
-          buffer.write('</ul>');
-          inList = false;
-        }
-        if (lineHtml.isEmpty) {
-          buffer.write('<br>');
-        } else {
-          buffer.write('<p>$lineHtml</p>');
-        }
-      }
-    }
-
-    if (inList) {
-      buffer.write('</ul>');
-    }
-
-    return buffer.toString();
-  }
-
-  String _buildHtmlForRange(int start, int end) {
-    if (start >= end) {
-      return '';
-    }
-
-    final boundaries = _collectBoundaries(start, end);
-    final buffer = StringBuffer();
-
-    for (var i = 0; i < boundaries.length - 1; i += 1) {
-      final segStart = boundaries[i];
-      final segEnd = boundaries[i + 1];
-      if (segStart == segEnd) {
-        continue;
-      }
-
-      final segment = text.substring(segStart, segEnd);
-      buffer.write(_wrapHtmlSegment(segment, segStart, segEnd));
-    }
-
-    return buffer.toString();
-  }
-
-  String _wrapHtmlSegment(String text, int start, int end) {
-    var result = _escapeHtml(text);
-    final color = _colorForRange(start, end);
-    if (color != null) {
-      result = '<span style="color: ${_colorToHex(color)}">$result</span>';
-    }
-    if (_anyRangeCovers(_underlineRanges, start, end)) {
-      result = '<u>$result</u>';
-    }
-    if (_anyRangeCovers(_italicRanges, start, end)) {
-      result = '<i>$result</i>';
-    }
-    if (_anyRangeCovers(_boldRanges, start, end)) {
-      result = '<b>$result</b>';
-    }
-    return result;
   }
 }

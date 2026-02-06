@@ -6,6 +6,7 @@ class HtmlRichTextFormField extends StatefulWidget {
     required this.strings,
     this.controller,
     this.initialHtml,
+    this.codec,
     this.focusNode,
     this.decoration,
     this.enabled = true,
@@ -23,6 +24,7 @@ class HtmlRichTextFormField extends StatefulWidget {
   final RichTextEditorStrings strings;
   final HtmlRichTextController? controller;
   final String? initialHtml;
+  final RichTextCodec? codec;
   final FocusNode? focusNode;
   final InputDecoration? decoration;
   final bool enabled;
@@ -57,9 +59,12 @@ class _HtmlRichTextFormFieldState extends State<HtmlRichTextFormField> {
     if (oldWidget.controller != widget.controller) {
       _disposeController();
       _initController();
+    } else if (widget.controller == null && oldWidget.codec != widget.codec) {
+      _disposeController();
+      _initController();
     } else if (widget.controller == null &&
         oldWidget.initialHtml != widget.initialHtml) {
-      _controller.setHtml(widget.initialHtml ?? '');
+      _controller.setEncoded(widget.initialHtml ?? '');
       _notifyFormField();
     }
   }
@@ -75,7 +80,10 @@ class _HtmlRichTextFormFieldState extends State<HtmlRichTextFormField> {
       _controller = widget.controller!;
       _ownsController = false;
     } else {
-      _controller = HtmlRichTextController(html: widget.initialHtml ?? '');
+      _controller = HtmlRichTextController(
+        html: widget.initialHtml ?? '',
+        codec: widget.codec,
+      );
       _ownsController = true;
     }
     _controller.addListener(_handleControllerChanged);
@@ -91,7 +99,7 @@ class _HtmlRichTextFormFieldState extends State<HtmlRichTextFormField> {
 
   void _handleControllerChanged() {
     _notifyFormField();
-    widget.onChanged?.call(_controller.html);
+    widget.onChanged?.call(_controller.encoded);
   }
 
   void _notifyFormField() {
@@ -99,7 +107,7 @@ class _HtmlRichTextFormFieldState extends State<HtmlRichTextFormField> {
       if (!mounted) {
         return;
       }
-      _formKey.currentState?.didChange(_controller.html);
+      _formKey.currentState?.didChange(_controller.encoded);
     });
   }
 
@@ -160,7 +168,7 @@ class _HtmlRichTextFormFieldState extends State<HtmlRichTextFormField> {
       validator: widget.validator,
       onSaved: widget.onSaved,
       autovalidateMode: widget.autovalidateMode,
-      initialValue: _controller.html,
+      initialValue: _controller.encoded,
       enabled: widget.enabled,
       builder: (state) {
         final effectiveDecoration = decoration.copyWith(
