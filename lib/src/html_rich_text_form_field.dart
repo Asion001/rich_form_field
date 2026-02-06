@@ -1,5 +1,35 @@
 part of 'package:rich_form_field/rich_form_field.dart';
 
+/// Builds a fully custom toolbar for the rich text field.
+typedef HtmlRichTextToolbarBuilder =
+    Widget Function(BuildContext context, HtmlRichTextController controller);
+
+/// Presents a custom color picker and returns the selected color.
+typedef RichTextColorPicker =
+    Future<Color?> Function(BuildContext context, Color? currentColor);
+
+/// Available tools for the default toolbar.
+enum DefaultTool { bold, italic, underline, list, color }
+
+/// Declares a custom tool button for the default toolbar.
+class RichTextCustomTool {
+  const RichTextCustomTool({
+    required this.id,
+    required this.iconBuilder,
+    required this.tooltip,
+    required this.onPressed,
+    this.isActive,
+    this.isEnabled,
+  });
+
+  final String id;
+  final Widget Function(BuildContext context, bool isActive) iconBuilder;
+  final String tooltip;
+  final ValueChanged<HtmlRichTextController> onPressed;
+  final bool Function(HtmlRichTextController controller)? isActive;
+  final bool Function(HtmlRichTextController controller)? isEnabled;
+}
+
 class HtmlRichTextFormField extends StatefulWidget {
   const HtmlRichTextFormField({
     super.key,
@@ -7,9 +37,11 @@ class HtmlRichTextFormField extends StatefulWidget {
     this.controller,
     this.initialHtml,
     this.codec,
+    this.customStyles = const [],
     this.focusNode,
     this.decoration,
     this.enabled = true,
+    this.autoInsertListMarkers = false,
     this.readOnly = false,
     this.minLines = 4,
     this.maxLines = 8,
@@ -19,12 +51,17 @@ class HtmlRichTextFormField extends StatefulWidget {
     this.onChanged,
     this.autovalidateMode,
     this.colorPalette,
+    this.onPickColor,
+    this.toolbarTools,
+    this.customTools = const [],
+    this.toolbarBuilder,
   });
 
   final RichTextEditorStrings strings;
   final HtmlRichTextController? controller;
   final String? initialHtml;
   final RichTextCodec? codec;
+  final List<RichTextCustomStyle> customStyles;
   final FocusNode? focusNode;
   final InputDecoration? decoration;
   final bool enabled;
@@ -37,6 +74,11 @@ class HtmlRichTextFormField extends StatefulWidget {
   final ValueChanged<String>? onChanged;
   final AutovalidateMode? autovalidateMode;
   final List<Color>? colorPalette;
+  final RichTextColorPicker? onPickColor;
+  final List<DefaultTool>? toolbarTools;
+  final List<RichTextCustomTool> customTools;
+  final HtmlRichTextToolbarBuilder? toolbarBuilder;
+  final bool autoInsertListMarkers;
 
   @override
   State<HtmlRichTextFormField> createState() => _HtmlRichTextFormFieldState();
@@ -66,6 +108,12 @@ class _HtmlRichTextFormFieldState extends State<HtmlRichTextFormField> {
         oldWidget.initialHtml != widget.initialHtml) {
       _controller.setEncoded(widget.initialHtml ?? '');
       _notifyFormField();
+    } else if (oldWidget.customStyles != widget.customStyles) {
+      _controller.registerStyles(widget.customStyles);
+    }
+
+    if (oldWidget.autoInsertListMarkers != widget.autoInsertListMarkers) {
+      _controller.autoInsertListMarkers = widget.autoInsertListMarkers;
     }
   }
 
@@ -82,11 +130,24 @@ class _HtmlRichTextFormFieldState extends State<HtmlRichTextFormField> {
     } else {
       _controller = HtmlRichTextController(
         html: widget.initialHtml ?? '',
-        codec: widget.codec,
+        codec: widget.codec ?? _buildCodec(),
+        customStyles: widget.customStyles,
+        autoInsertListMarkers: widget.autoInsertListMarkers,
       );
       _ownsController = true;
     }
+    if (!_ownsController) {
+      _controller.registerStyles(widget.customStyles);
+      _controller.autoInsertListMarkers = widget.autoInsertListMarkers;
+    }
     _controller.addListener(_handleControllerChanged);
+  }
+
+  RichTextCodec _buildCodec() {
+    if (widget.customStyles.isEmpty) {
+      return const HtmlRichTextCodec();
+    }
+    return HtmlRichTextCodec(customStyles: widget.customStyles);
   }
 
   void _disposeController() {
@@ -116,8 +177,21 @@ class _HtmlRichTextFormFieldState extends State<HtmlRichTextFormField> {
       return;
     }
 
+    final selected = await (widget.onPickColor ?? _defaultPickColor)(
+      context,
+      _controller.activeColor,
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    _controller.applyColor(selected);
+  }
+
+  Future<Color?> _defaultPickColor(BuildContext context, Color? currentColor) {
     final palette = widget.colorPalette ?? _defaultPalette;
-    final selected = await showDialog<Color?>(
+    return showDialog<Color?>(
       context: context,
       builder: (context) {
         return AlertDialog(
@@ -149,12 +223,6 @@ class _HtmlRichTextFormFieldState extends State<HtmlRichTextFormField> {
         );
       },
     );
-
-    if (!mounted) {
-      return;
-    }
-
-    _controller.applyColor(selected);
   }
 
   @override
@@ -181,22 +249,18 @@ class _HtmlRichTextFormFieldState extends State<HtmlRichTextFormField> {
             AnimatedBuilder(
               animation: _controller,
               builder: (context, _) {
+                final toolbarBuilder = widget.toolbarBuilder;
+                if (toolbarBuilder != null) {
+                  return toolbarBuilder(context, _controller);
+                }
+
+                final tools = widget.toolbarTools ?? _defaultToolbarTools;
                 return _Toolbar(
-                  onBold: _controller.toggleBold,
-                  onItalic: _controller.toggleItalic,
-                  onUnderline: _controller.toggleUnderline,
-                  onList: _controller.toggleList,
-                  onColor: _pickColor,
-                  isBold: _controller.isBoldActive,
-                  isItalic: _controller.isItalicActive,
-                  isUnderline: _controller.isUnderlineActive,
-                  isList: _controller.isListActive,
-                  activeColor: _controller.activeColor,
-                  boldLabel: widget.strings.bold,
-                  italicLabel: widget.strings.italic,
-                  underlineLabel: widget.strings.underline,
-                  listLabel: widget.strings.list,
-                  colorLabel: widget.strings.textColor,
+                  controller: _controller,
+                  tools: tools,
+                  customTools: widget.customTools,
+                  onPickColor: _pickColor,
+                  strings: widget.strings,
                 );
               },
             ),
@@ -219,87 +283,93 @@ class _HtmlRichTextFormFieldState extends State<HtmlRichTextFormField> {
 
 class _Toolbar extends StatelessWidget {
   const _Toolbar({
-    required this.onBold,
-    required this.onItalic,
-    required this.onUnderline,
-    required this.onList,
-    required this.onColor,
-    required this.isBold,
-    required this.isItalic,
-    required this.isUnderline,
-    required this.isList,
-    required this.activeColor,
-    required this.boldLabel,
-    required this.italicLabel,
-    required this.underlineLabel,
-    required this.listLabel,
-    required this.colorLabel,
+    required this.controller,
+    required this.tools,
+    required this.customTools,
+    required this.onPickColor,
+    required this.strings,
   });
 
-  final VoidCallback onBold;
-  final VoidCallback onItalic;
-  final VoidCallback onUnderline;
-  final VoidCallback onList;
-  final VoidCallback onColor;
-  final bool isBold;
-  final bool isItalic;
-  final bool isUnderline;
-  final bool isList;
-  final Color? activeColor;
-  final String boldLabel;
-  final String italicLabel;
-  final String underlineLabel;
-  final String listLabel;
-  final String colorLabel;
+  final HtmlRichTextController controller;
+  final List<DefaultTool> tools;
+  final List<RichTextCustomTool> customTools;
+  final Future<void> Function() onPickColor;
+  final RichTextEditorStrings strings;
 
   @override
   Widget build(BuildContext context) {
-    final color = activeColor ?? Colors.transparent;
+    final color = controller.activeColor ?? Colors.transparent;
 
     return Material(
       color: Colors.transparent,
       child: Wrap(
         spacing: 8,
         children: [
-          _ToggleIconButton(
-            icon: Icons.format_bold,
-            tooltip: boldLabel,
-            selected: isBold,
-            onPressed: onBold,
-          ),
-          _ToggleIconButton(
-            icon: Icons.format_italic,
-            tooltip: italicLabel,
-            selected: isItalic,
-            onPressed: onItalic,
-          ),
-          _ToggleIconButton(
-            icon: Icons.format_underline,
-            tooltip: underlineLabel,
-            selected: isUnderline,
-            onPressed: onUnderline,
-          ),
-          _ToggleIconButton(
-            icon: Icons.format_list_bulleted,
-            tooltip: listLabel,
-            selected: isList,
-            onPressed: onList,
-          ),
-          IconButton(
-            onPressed: onColor,
-            tooltip: colorLabel,
-            icon: Container(
-              width: 20,
-              height: 20,
-              decoration: BoxDecoration(
-                color: color,
-                border: Border.all(color: Theme.of(context).dividerColor),
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-          ),
+          for (final tool in tools) _buildDefaultTool(context, tool, color),
+          for (final tool in customTools) _buildCustomTool(context, tool),
         ],
       ),
+    );
+  }
+
+  Widget _buildDefaultTool(
+    BuildContext context,
+    DefaultTool tool,
+    Color activeColor,
+  ) {
+    switch (tool) {
+      case DefaultTool.bold:
+        return _ToggleIconButton(
+          icon: Icons.format_bold,
+          tooltip: strings.bold,
+          selected: controller.isBoldActive,
+          onPressed: controller.toggleBold,
+        );
+      case DefaultTool.italic:
+        return _ToggleIconButton(
+          icon: Icons.format_italic,
+          tooltip: strings.italic,
+          selected: controller.isItalicActive,
+          onPressed: controller.toggleItalic,
+        );
+      case DefaultTool.underline:
+        return _ToggleIconButton(
+          icon: Icons.format_underline,
+          tooltip: strings.underline,
+          selected: controller.isUnderlineActive,
+          onPressed: controller.toggleUnderline,
+        );
+      case DefaultTool.list:
+        return _ToggleIconButton(
+          icon: Icons.format_list_bulleted,
+          tooltip: strings.list,
+          selected: controller.isListActive,
+          onPressed: controller.toggleList,
+        );
+      case DefaultTool.color:
+        return IconButton(
+          onPressed: onPickColor,
+          tooltip: strings.textColor,
+          icon: Container(
+            width: 20,
+            height: 20,
+            decoration: BoxDecoration(
+              color: activeColor,
+              border: Border.all(color: Theme.of(context).dividerColor),
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+    }
+  }
+
+  Widget _buildCustomTool(BuildContext context, RichTextCustomTool tool) {
+    final enabled = tool.isEnabled?.call(controller) ?? true;
+    final selected = tool.isActive?.call(controller) ?? false;
+    return IconButton(
+      onPressed: enabled ? () => tool.onPressed(controller) : null,
+      tooltip: tool.tooltip,
+      icon: tool.iconBuilder(context, selected),
     );
   }
 }
@@ -315,7 +385,7 @@ class _ToggleIconButton extends StatelessWidget {
   final IconData icon;
   final String tooltip;
   final bool selected;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -372,4 +442,12 @@ const List<Color> _defaultPalette = [
   Color(0xFFFFCA28),
   Color(0xFFFFA726),
   Color(0xFF8D6E63),
+];
+
+const List<DefaultTool> _defaultToolbarTools = [
+  DefaultTool.bold,
+  DefaultTool.italic,
+  DefaultTool.underline,
+  DefaultTool.list,
+  DefaultTool.color,
 ];

@@ -34,10 +34,10 @@ packages:
     dependency: "direct dev"
     description:
       name: flutter_lints
-      sha256: "3105dc8492f6183fb076ccf1f351ac3d60564bff92e20bfc4af9cc1651f4e7e1"
+      sha256: "5398f14efa795ffb7a33e9b6a08798b26a180edac4ad7db3f231e40f82ce11e1"
       url: "https://pub.dev"
     source: hosted
-    version: "6.0.0"
+    version: "5.0.0"
   html:
     dependency: transitive
     description:
@@ -50,10 +50,10 @@ packages:
     dependency: transitive
     description:
       name: lints
-      sha256: "12f842a479589fea194fe5c5a3095abc7be0c1f2ddfa9a0e76aed1dbd26a87df"
+      sha256: c35bb79562d980e9a453fc715854e1ed39e24e7d0297a880ef54e17f9874a9d7
       url: "https://pub.dev"
     source: hosted
-    version: "6.1.0"
+    version: "5.1.1"
   material_color_utilities:
     dependency: transitive
     description:
@@ -84,7 +84,7 @@ packages:
       path: ".."
       relative: true
     source: path
-    version: "0.1.0"
+    version: "0.2.0"
   sky_engine:
     dependency: transitive
     description: flutter
@@ -115,5 +115,5 @@ packages:
     source: hosted
     version: "2.2.0"
 sdks:
-  dart: ">=3.9.0 <4.0.0"
-  flutter: ">=3.38.9 <4.0.0"
+  dart: ">=3.8.0-0 <4.0.0"
+  flutter: ">=3.29.0"
