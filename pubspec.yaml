@@ -5,8 +5,8 @@ repository: https://github.com/Asion001/rich_form_field
 issue_tracker: https://github.com/Asion001/rich_form_field/issues
 
 environment:
-  sdk: ">=3.9.0 <4.0.0"
-  flutter: 3.38.9
+  sdk: ">=3.7.0 <4.0.0"
+  flutter: ">=3.29.0"
 
 dependencies:
   flutter:
@@ -16,4 +16,4 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^6.0.0
+  flutter_lints: ">=5.0.0"
