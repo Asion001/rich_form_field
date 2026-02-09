@@ -127,7 +127,7 @@ class HtmlRichTextController extends TextEditingController {
     _pendingUnderline = false;
     _pendingColor = null;
     if (_pendingCustomStyles.isNotEmpty) {
-      _pendingCustomStyles.updateAll((_, __) => false);
+      _pendingCustomStyles.updateAll((_, _) => false);
     }
     _lastText = text;
     _suppressChanges = false;

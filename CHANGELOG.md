@@ -1,3 +1,7 @@
+## 0.2.1
+
+- Fix: resolve pending custom style reset using an unused parameter placeholder.
+
 ## 0.2.0
 
 - Add toolbar customization: ordered default tools, custom tools, and toolbar builder.
