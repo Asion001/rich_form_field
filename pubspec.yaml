@@ -1,6 +1,6 @@
 name: rich_form_field
 description: Rich text form field with toolbar, styling ranges, and HTML codec output.
-version: 0.2.1
+version: 0.2.2
 repository: https://github.com/Asion001/rich_form_field
 issue_tracker: https://github.com/Asion001/rich_form_field/issues
 

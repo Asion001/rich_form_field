@@ -1,3 +1,7 @@
+## 0.2.2
+
+- CI: switch publish workflow to the official OIDC-based pub.dev workflow.
+
 ## 0.2.1
 
 - Fix: resolve pending custom style reset using an unused parameter placeholder.
