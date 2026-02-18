@@ -1,3 +1,12 @@
+# Changelog
+
+## 0.3.0
+
+- Add read-only rendering widgets: `RichStyledText` and `RichSelectableStyledText`.
+- Support rendering from either encoded content (`encoded` + `codec`) or pre-decoded `RichTextFormatResult`.
+- Add configurable list marker display (`literal` or `bullets`) and custom style resolver callback.
+- Add documentation examples and widget tests for styled/selection/plain-text rendering.
+
 ## 0.2.2
 
 - CI: switch publish workflow to the official OIDC-based pub.dev workflow.

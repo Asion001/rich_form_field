@@ -78,6 +78,7 @@ class _RichFormFieldExamplePageState extends State<RichFormFieldExamplePage> {
             _ExamplePane(
               controller: _simpleController,
               html: _simpleHtml,
+              codec: const HtmlRichTextCodec(),
               onChanged: (value) {
                 setState(() {
                   _simpleHtml = value;
@@ -87,6 +88,7 @@ class _RichFormFieldExamplePageState extends State<RichFormFieldExamplePage> {
             _ExamplePane(
               controller: _advancedController,
               html: _advancedHtml,
+              codec: HtmlRichTextCodec(customStyles: _customStyles),
               customStyles: _customStyles,
               toolbarTools: const [
                 DefaultTool.bold,
@@ -206,6 +208,7 @@ class _ExamplePane extends StatelessWidget {
   const _ExamplePane({
     required this.controller,
     required this.html,
+    required this.codec,
     required this.onChanged,
     this.customStyles = const [],
     this.toolbarTools,
@@ -215,6 +218,7 @@ class _ExamplePane extends StatelessWidget {
 
   final HtmlRichTextController controller;
   final String html;
+  final RichTextCodec codec;
   final ValueChanged<String> onChanged;
   final List<RichTextCustomStyle> customStyles;
   final List<DefaultTool>? toolbarTools;
@@ -250,9 +254,44 @@ class _ExamplePane extends StatelessWidget {
           const SizedBox(height: 8),
           Expanded(
             child: SingleChildScrollView(
-              child: SelectableText(
-                html.isEmpty ? '(empty)' : html,
-                style: Theme.of(context).textTheme.bodySmall,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SelectableText(
+                    html.isEmpty ? '(empty)' : html,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Styled preview:'),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Theme.of(context).dividerColor),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: RichStyledText(
+                      encoded: html.isEmpty ? '(empty)' : html,
+                      codec: codec,
+                      customStyles: customStyles,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text('Selectable styled preview:'),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Theme.of(context).dividerColor),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: RichSelectableStyledText(
+                      encoded: html.isEmpty ? '(empty)' : html,
+                      codec: codec,
+                      customStyles: customStyles,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

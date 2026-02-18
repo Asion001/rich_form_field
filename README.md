@@ -11,6 +11,8 @@ and the Flutter guide for
 [developing packages and plugins](https://flutter.dev/to/develop-packages).
 -->
 
+# rich_form_field
+
 Rich text form field with a formatting toolbar, inline style ranges, and
 HTML codec output. Designed for simple rich text input in Flutter forms.
 
@@ -23,15 +25,6 @@ HTML codec output. Designed for simple rich text input in Flutter forms.
 - Pluggable `RichTextCodec` for alternative save formats.
 - Optional auto-insert list markers when pressing Enter.
 - HTML parsing backed by `package:html` and a simple tag subset.
-
-## Getting started
-
-Add the dependency to `pubspec.yaml`:
-
-```yaml
-dependencies:
-  rich_form_field: ^0.2.0
-```
 
 ## Usage
 
@@ -75,6 +68,41 @@ HtmlRichTextFormField(
     clear: 'Clear',
     cancel: 'Cancel',
   ),
+)
+```
+
+### Read-only styled rendering
+
+Use `RichStyledText` or `RichSelectableStyledText` to render exported editor data.
+
+```dart
+RichStyledText(
+  encoded: '<p><b>Hello</b> <i>world</i></p>',
+)
+
+RichSelectableStyledText(
+  encoded: '<ul><li>First</li><li>Second</li></ul>',
+  listRenderMode: RichTextListRenderMode.bullets,
+)
+```
+
+You can also pass pre-decoded values and custom style resolvers:
+
+```dart
+final codec = HtmlRichTextCodec(customStyles: const [
+  RichTextCustomStyle(key: 'highlight', tag: 'mark', className: 'hl'),
+]);
+
+final result = codec.decode('<p><mark class="hl">Hi</mark></p>');
+
+RichStyledText.fromResult(
+  result: result,
+  customStyleResolver: (key, base) {
+    if (key == 'highlight') {
+      return base.copyWith(fontWeight: FontWeight.w600);
+    }
+    return null;
+  },
 )
 ```
 
@@ -166,5 +194,5 @@ See the full example app in [example/lib/main.dart](example/lib/main.dart).
 
 ## Additional information
 
-- Repository: https://github.com/Asion001/rich_form_field
-- Issues: https://github.com/Asion001/rich_form_field/issues
+- Repository: [github.com/Asion001/rich_form_field](https://github.com/Asion001/rich_form_field)
+- Issues: [github.com/Asion001/rich_form_field/issues](https://github.com/Asion001/rich_form_field/issues)
